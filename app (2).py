@@ -1,5 +1,6 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 import json
 import re
 from PIL import Image
@@ -14,8 +15,8 @@ st.set_page_config(
 )
 
 # ── Gemini setup ─────────────────────────────────────────────
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-model = genai.GenerativeModel("gemini-1.5-flash")
+client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+MODEL = "gemini-2.5-flash"
 
 # ── Regulation database ───────────────────────────────────────
 REGULATIONS = {
@@ -118,12 +119,6 @@ h1 {
 }
 .subtitle {
     color: #4a6650; font-size: 14px; margin-bottom: 1.5rem; margin-top: 2px;
-}
-
-/* Country selector */
-div[data-testid="stHorizontalBlock"] button {
-    border-radius: 100px !important;
-    font-family: 'DM Sans', sans-serif !important;
 }
 
 /* File uploader */
@@ -232,9 +227,20 @@ def parse_json(text: str) -> dict:
 def call_gemini(prompt: str, image: Image.Image = None) -> dict:
     try:
         if image:
-            response = model.generate_content([prompt, image])
+            buf = io.BytesIO()
+            image.save(buf, format="JPEG")
+            img_part = types.Part.from_bytes(
+                data=buf.getvalue(), mime_type="image/jpeg"
+            )
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=[img_part, prompt]
+            )
         else:
-            response = model.generate_content(prompt)
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=prompt
+            )
         return parse_json(response.text)
     except Exception as e:
         st.error(f"AI error: {e}")
