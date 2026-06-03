@@ -220,12 +220,21 @@ h1 {
 
 # ── Helper ────────────────────────────────────────────────────
 def parse_json(text: str) -> dict:
+    # 移除 thinking 標籤
+    text = re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL)
+    # 移除 markdown fences
     text = re.sub(r"```json|```", "", text).strip()
     start, end = text.find("{"), text.rfind("}")
+    if start == -1 or end == -1:
+        raise ValueError("No JSON found in response")
     return json.loads(text[start:end+1])
 
 def call_gemini(prompt: str, image: Image.Image = None) -> dict:
     try:
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            thinking_config=types.ThinkingConfig(thinking_budget=0)
+        )
         if image:
             buf = io.BytesIO()
             image.save(buf, format="JPEG")
@@ -234,18 +243,19 @@ def call_gemini(prompt: str, image: Image.Image = None) -> dict:
             )
             response = client.models.generate_content(
                 model=MODEL,
-                contents=[img_part, prompt]
+                contents=[img_part, prompt],
+                config=config
             )
         else:
             response = client.models.generate_content(
                 model=MODEL,
-                contents=prompt
+                contents=prompt,
+                config=config
             )
         return parse_json(response.text)
     except Exception as e:
         st.error(f"AI error: {e}")
         return None
-
 def render_result(data: dict, country: str):
     reg = REGULATIONS[country]
     bin_key = data.get("bin", "general")
