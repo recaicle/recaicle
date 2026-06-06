@@ -16,7 +16,6 @@ st.set_page_config(
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 MODEL = "gemini-2.5-flash"
 
-# ── Regulation database ───────────────────────────────────────
 REGULATIONS = {
     "🇹🇼 Taiwan": {
         "bins": {
@@ -81,15 +80,15 @@ NON-BURNABLE (燃えないゴミ):
 - Small appliances: hair dryers, irons, clocks, electric razors
 - Umbrellas (under 30cm folded)
 
-RECYCLABLE (資源ゴミ) — sorted by type:
+RECYCLABLE (資源ゴミ):
 - Paper: newspapers, cardboard (flattened), magazines (each type bundled separately)
 - Glass bottles: clear, brown, other colors (rinsed, caps removed)
 - Aluminum cans and steel cans (rinsed)
 - Clean clothing and textiles (古着)
 
-PET BOTTLES (ペットボトル) — separate category:
+PET BOTTLES (ペットボトル):
 - Only bottles with the ペットボトル mark
-- Remove cap → remove label → rinse → crush flat
+- Remove cap, remove label, rinse, crush flat
 
 OVERSIZED (粗大ゴミ):
 - Any item over 30cm: furniture, bicycles, large appliances
@@ -114,7 +113,7 @@ Reply ONLY with valid JSON:
         "prompt": """You are a waste sorting expert for France. Apply national rules (2023 extension + 2024 biodéchets law).
 
 BAC JAUNE (Yellow bin — ALL packaging):
-- All plastics: bottles, yogurt pots, trays, bags, films, cling wrap (since 2023 — ALL plastics)
+- All plastics: bottles, yogurt pots, trays, bags, films (since 2023 — ALL plastics)
 - All cardboard and paper: boxes, newspapers, magazines, paper bags (flattened)
 - All metals: cans, tins, aluminum foil, empty aerosol cans, bottle caps
 - Cartons/Tetra Pak: milk, juice, soup (rinsed and flattened)
@@ -123,10 +122,10 @@ BAC JAUNE (Yellow bin — ALL packaging):
 CONTENEUR VERRE (Glass container — glass only):
 - Glass bottles, jars, preserve pots
 - NOT: drinking glasses, pyrex, mirrors, ceramics, light bulbs → gray bin
-- Glass goes in STREET-SIDE containers, not household bins
+- Glass goes in street-side containers, not household bins
 - Paris exception: green bin = general waste; glass goes in white street containers
 
-BAC GRIS / NOIR (Gray bin — non-recyclable):
+BAC GRIS (Gray bin — non-recyclable):
 - Tissues, paper towels, diapers, sanitary products, cat litter
 - Ceramics, dishes, mirrors, drinking glasses, pyrex
 - Extremely soiled packaging
@@ -134,22 +133,18 @@ BAC GRIS / NOIR (Gray bin — non-recyclable):
 BAC BRUN (Brown bin — organic, mandatory since Jan 2024):
 - Vegetable and fruit peels, eggshells, coffee grounds, tea bags
 - Cooked food leftovers, bread, meat, fish scraps
-- Small food-soiled paper pieces
 
 DECHETTERIE (Special drop-off):
 - Large furniture and appliances
-- Electronics (also accepted at retailers)
-- Batteries → collection boxes at stores
-- Paint, chemicals, motor oil
-- Textiles → dedicated street collection bins (Le Relais, Emmaüs)
-- Medicines → return to pharmacy
+- Electronics (also at retailers), batteries (at stores), paint, chemicals
+- Textiles → street collection bins (Le Relais, Emmaüs)
+- Medicines → pharmacy
 
 Reply ONLY with valid JSON:
-{"item":"[English name]","bin":"[jaune/vert/gris/brun/dechetterie]","binLabel":"[label]","emoji":"[emoji]","instructions":["brief step 1","brief step 2"],"note":"[one key France tip if needed, mention 2023/2024 changes if relevant]","confidence":"[high/medium/low]"}"""
+{"item":"[English name]","bin":"[jaune/vert/gris/brun/dechetterie]","binLabel":"[label]","emoji":"[emoji]","instructions":["brief step 1","brief step 2"],"note":"[one key France tip if needed]","confidence":"[high/medium/low]"}"""
     },
 }
 
-# ── CSS ───────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Sans:wght@300;400;500&display=swap');
@@ -242,7 +237,7 @@ h1 {
 </style>
 """, unsafe_allow_html=True)
 
-# ── Helpers ───────────────────────────────────────────────────
+
 def parse_json(text: str) -> dict:
     text = re.sub(r'<thinking>.*?</thinking>', '', text, flags=re.DOTALL)
     text = re.sub(r"```json|```", "", text).strip()
@@ -250,6 +245,7 @@ def parse_json(text: str) -> dict:
     if start == -1 or end == -1:
         raise ValueError("No JSON found")
     return json.loads(text[start:end+1])
+
 
 def call_gemini(prompt: str, image: Image.Image = None) -> dict:
     try:
@@ -273,12 +269,13 @@ def call_gemini(prompt: str, image: Image.Image = None) -> dict:
         st.error(f"AI error: {e}")
         return None
 
+
 def render_result(data: dict, country: str):
     reg      = REGULATIONS[country]
     bin_key  = data.get("bin", "general")
-    bin_info = reg["bins"].get(bin_key, {"label": data.get("binLabel","?"), "color":"#4dff91", "emoji":"♻️"})
-    conf_colors = {"high":"#4dff91", "medium":"#ffe040", "low":"#ff9090"}
-    conf_color  = conf_colors.get(data.get("confidence","high"), "#4dff91")
+    bin_info = reg["bins"].get(bin_key, {"label": data.get("binLabel", "?"), "color": "#4dff91", "emoji": "♻️"})
+    conf_colors = {"high": "#4dff91", "medium": "#ffe040", "low": "#ff9090"}
+    conf_color  = conf_colors.get(data.get("confidence", "high"), "#4dff91")
     flag = country.split()[0]
 
     steps_html = "".join(
@@ -294,9 +291,9 @@ def render_result(data: dict, country: str):
     <div class="result-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
         <div>
-          <div class="result-item">{data.get("item","Item")}</div>
-          <div class="country-tag">{flag} {country.split(" ",1)[1]}
-            <span class="conf-badge" style="color:{conf_color}">● {data.get("confidence","").upper()}</span>
+          <div class="result-item">{data.get("item", "Item")}</div>
+          <div class="country-tag">{flag} {country.split(" ", 1)[1]}
+            <span class="conf-badge" style="color:{conf_color}">● {data.get("confidence", "").upper()}</span>
           </div>
         </div>
         <div style="font-size:36px;margin-top:4px">{data.get("emoji", bin_info["emoji"])}</div>
@@ -311,16 +308,18 @@ def render_result(data: dict, country: str):
     </div>
     """, unsafe_allow_html=True)
 
+
 def process_image(image: Image.Image, country: str):
     with st.spinner("🔍 Analyzing..."):
         prompt = (
             f"{REGULATIONS[country]['prompt']}\n\n"
             f"Identify the main waste item in this image and tell me which bin it goes in "
-            f"for {country.split(' ',1)[1]}. Return only the JSON."
+            f"for {country.split(' ', 1)[1]}. Return only the JSON."
         )
         result = call_gemini(prompt, image)
     if result:
         render_result(result, country)
+
 
 # ── UI ────────────────────────────────────────────────────────
 st.markdown('<h1>recAIcle</h1>', unsafe_allow_html=True)
@@ -357,26 +356,26 @@ with tab_cam:
     st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
 
     if st.session_state.cam_mode == "mobile":
-    st.markdown("Tap **Take Photo** below — allow camera permission when prompted.")
-    camera_photo = st.camera_input("", label_visibility="collapsed", key="cam_mobile")
-    if camera_photo:
-        image = Image.open(camera_photo)
-        process_image(image, country)
-    st.markdown("---")
-    st.markdown("**Or upload from gallery:**")
-    cam_file = st.file_uploader(
-        "",
-        type=["jpg", "jpeg", "png", "webp", "heic"],
-        label_visibility="collapsed",
-        key="cam_mob"
-    )
-    if cam_file:
-        image = Image.open(cam_file)
-        st.image(image, use_column_width=True)
-        process_image(image, country)
+        st.markdown("Tap **Take Photo** — allow camera permission if prompted.")
+        camera_photo = st.camera_input("", label_visibility="collapsed", key="cam_mobile")
+        if camera_photo:
+            image = Image.open(camera_photo)
+            process_image(image, country)
+        st.markdown("---")
+        st.markdown("**Or upload from gallery:**")
+        cam_file = st.file_uploader(
+            "",
+            type=["jpg", "jpeg", "png", "webp", "heic"],
+            label_visibility="collapsed",
+            key="cam_mob"
+        )
+        if cam_file:
+            image = Image.open(cam_file)
+            st.image(image, use_column_width=True)
+            process_image(image, country)
     else:
         st.markdown("Point your webcam at the item and tap the capture button.")
-        camera_photo = st.camera_input("", label_visibility="collapsed")
+        camera_photo = st.camera_input("", label_visibility="collapsed", key="cam_desktop")
         if camera_photo:
             image = Image.open(camera_photo)
             process_image(image, country)
@@ -410,7 +409,7 @@ with tab_text:
         with st.spinner("🔍 Checking regulations..."):
             prompt = (
                 f"{REGULATIONS[country]['prompt']}\n\n"
-                f"Which bin does this item go in for {country.split(' ',1)[1]}: "
+                f"Which bin does this item go in for {country.split(' ', 1)[1]}: "
                 f'"{text_query.strip()}"? Return only the JSON.'
             )
             result = call_gemini(prompt)
