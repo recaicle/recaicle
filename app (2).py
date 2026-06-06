@@ -81,7 +81,7 @@ NON-BURNABLE (燃えないゴミ):
 - Umbrellas (under 30cm folded)
 
 RECYCLABLE (資源ゴミ):
-- Paper: newspapers, cardboard (flattened), magazines (each type bundled separately)
+- Paper: newspapers, cardboard (flattened), magazines
 - Glass bottles: clear, brown, other colors (rinsed, caps removed)
 - Aluminum cans and steel cans (rinsed)
 - Clean clothing and textiles (古着)
@@ -177,10 +177,8 @@ h1 {
     border-color: rgba(77,255,145,0.4) !important; box-shadow: none !important;
 }
 .stButton > button {
-    border-radius: 12px !important;
-    font-family: 'Syne', sans-serif !important;
-    font-weight: 700 !important;
-    transition: all 0.2s !important;
+    border-radius: 12px !important; font-family: 'Syne', sans-serif !important;
+    font-weight: 700 !important; transition: all 0.2s !important;
 }
 .stButton > button[kind="primary"] {
     background: #4dff91 !important; color: #071209 !important;
@@ -234,8 +232,16 @@ h1 {
     background:#071209 !important; border:1px solid #1e3622 !important;
     border-radius:12px !important; color:#e8f5eb !important;
 }
-</style>
-""", unsafe_allow_html=True)
+/* Native camera button */
+.native-cam-btn {
+    display: block; width: 100%; padding: 15px; margin-bottom: 14px;
+    background: #4dff91; color: #071209; border: none; border-radius: 12px;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+    font-family: 'Syne', sans-serif; text-align: center;
+}
+.native-cam-btn:active { opacity: 0.8; }
+#cam-native-input { display: none; }
+</style>""", unsafe_allow_html=True)
 
 
 def parse_json(text: str) -> dict:
@@ -277,7 +283,6 @@ def render_result(data: dict, country: str):
     conf_colors = {"high": "#4dff91", "medium": "#ffe040", "low": "#ff9090"}
     conf_color  = conf_colors.get(data.get("confidence", "high"), "#4dff91")
     flag = country.split()[0]
-
     steps_html = "".join(
         f'<div class="step-item"><span>✅</span><span>{s}</span></div>'
         for s in data.get("instructions", [])
@@ -286,7 +291,6 @@ def render_result(data: dict, country: str):
         f'<div class="note-box"><span class="note-label">📌 </span>{data["note"]}</div>'
         if data.get("note") else ""
     )
-
     st.markdown(f"""
     <div class="result-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -337,42 +341,67 @@ with tab_cam:
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button(
-            "📱 Mobile",
-            use_container_width=True,
-            type="primary" if st.session_state.cam_mode == "mobile" else "secondary"
-        ):
+        if st.button("📱 Mobile", use_container_width=True,
+                     type="primary" if st.session_state.cam_mode == "mobile" else "secondary"):
             st.session_state.cam_mode = "mobile"
             st.rerun()
     with col2:
-        if st.button(
-            "🖥️ Webcam",
-            use_container_width=True,
-            type="primary" if st.session_state.cam_mode == "desktop" else "secondary"
-        ):
+        if st.button("🖥️ Webcam", use_container_width=True,
+                     type="primary" if st.session_state.cam_mode == "desktop" else "secondary"):
             st.session_state.cam_mode = "desktop"
             st.rerun()
 
-    st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top:14px'></div>", unsafe_allow_html=True)
 
     if st.session_state.cam_mode == "mobile":
-        st.markdown("Tap **Take Photo** — allow camera permission if prompted.")
-        camera_photo = st.camera_input("", label_visibility="collapsed", key="cam_mobile")
-        if camera_photo:
-            image = Image.open(camera_photo)
-            process_image(image, country)
-        st.markdown("---")
-        st.markdown("**Or upload from gallery:**")
+        # Native camera button — uses <input capture="environment"> to open camera app directly
+        st.markdown("""
+<input type="file" id="cam-native-input" accept="image/*" capture="environment">
+<button class="native-cam-btn" onclick="document.getElementById('cam-native-input').click()">
+    📷 Take Photo
+</button>
+<script>
+(function() {
+    var nativeInput = document.getElementById('cam-native-input');
+    if (!nativeInput) return;
+    nativeInput.addEventListener('change', function(e) {
+        var file = e.target.files[0];
+        if (!file) return;
+        // Find the Streamlit file uploader input (exclude our own native input)
+        var allFileInputs = document.querySelectorAll('input[type="file"]');
+        var stInput = null;
+        for (var i = 0; i < allFileInputs.length; i++) {
+            if (allFileInputs[i].id !== 'cam-native-input') {
+                stInput = allFileInputs[i];
+                break;
+            }
+        }
+        if (stInput) {
+            try {
+                var dt = new DataTransfer();
+                dt.items.add(file);
+                stInput.files = dt.files;
+                stInput.dispatchEvent(new Event('change', { bubbles: true }));
+            } catch(err) {
+                console.warn('DataTransfer fallback:', err);
+            }
+        }
+    });
+})();
+</script>
+""", unsafe_allow_html=True)
+
+        st.markdown("<div style='color:#4a6650;font-size:13px;margin-bottom:10px'>Or upload from gallery:</div>",
+                    unsafe_allow_html=True)
         cam_file = st.file_uploader(
-            "",
-            type=["jpg", "jpeg", "png", "webp", "heic"],
-            label_visibility="collapsed",
-            key="cam_mob"
+            "", type=["jpg", "jpeg", "png", "webp", "heic"],
+            label_visibility="collapsed", key="cam_mob"
         )
         if cam_file:
             image = Image.open(cam_file)
             st.image(image, use_column_width=True)
             process_image(image, country)
+
     else:
         st.markdown("Point your webcam at the item and tap the capture button.")
         camera_photo = st.camera_input("", label_visibility="collapsed", key="cam_desktop")
@@ -383,8 +412,7 @@ with tab_cam:
 # ── Upload tab ────────────────────────────────────────────────
 with tab_upload:
     uploaded = st.file_uploader(
-        "",
-        type=["jpg", "jpeg", "png", "webp", "heic"],
+        "", type=["jpg", "jpeg", "png", "webp", "heic"],
         label_visibility="collapsed"
     )
     if uploaded:
@@ -398,8 +426,7 @@ with tab_text:
     col1, col2 = st.columns([4, 1])
     with col1:
         text_query = st.text_input(
-            "",
-            placeholder="e.g. plastic bottle, pizza box, old battery...",
+            "", placeholder="e.g. plastic bottle, pizza box, old battery...",
             label_visibility="collapsed"
         )
     with col2:
