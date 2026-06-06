@@ -316,17 +316,48 @@ def process_image(image: Image.Image, country: str):
 st.markdown('<h1>recAIcle</h1>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">AI-powered waste sorting · Point, snap, toss right.</div>', unsafe_allow_html=True)
 
+# ── Device detection ──────────────────────────────────────────
+device = st.query_params.get("device", None)
+
+if device is None:
+    st.components.v1.html("""
+    <script>
+        const ua = navigator.userAgent;
+        const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua) ||
+                         ('ontouchstart' in window && window.innerWidth < 1024);
+        const url = new URL(window.parent.location.href);
+        url.searchParams.set('device', isMobile ? 'mobile' : 'desktop');
+        window.parent.location.replace(url.toString());
+    </script>
+    """, height=0)
+    st.stop()
+
+is_mobile = device == 'mobile'
+
 country = st.selectbox("", list(REGULATIONS.keys()), label_visibility="collapsed")
 st.markdown("---")
 
 tab_cam, tab_upload, tab_text = st.tabs(["📷 Camera", "📁 Upload Photo", "⌨️ Type Item"])
 
 with tab_cam:
-    st.markdown("Point your camera at the item and tap the capture button.")
-    camera_photo = st.camera_input("", label_visibility="collapsed")
-    if camera_photo:
-        image = Image.open(camera_photo)
-        process_image(image, country)
+    if is_mobile:
+        st.markdown("Tap below → select **Take Photo** to use your camera.")
+        cam_file = st.file_uploader(
+            "",
+            type=["jpg", "jpeg", "png", "webp", "heic"],
+            label_visibility="collapsed",
+            key="cam_upload"
+        )
+        if cam_file:
+            image = Image.open(cam_file)
+            st.image(image, use_column_width=True)
+            process_image(image, country)
+    else:
+        st.markdown("Point your camera at the item and tap the capture button.")
+        camera_photo = st.camera_input("", label_visibility="collapsed")
+        if camera_photo:
+            image = Image.open(camera_photo)
+            process_image(image, country)
 
 with tab_upload:
     uploaded = st.file_uploader("", type=["jpg","jpeg","png","webp","heic"], label_visibility="collapsed")
