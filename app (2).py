@@ -357,17 +357,23 @@ with tab_cam:
     st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
 
     if st.session_state.cam_mode == "mobile":
-        st.markdown("Tap below → select **Take Photo** to use your camera.")
-        cam_file = st.file_uploader(
-            "",
-            type=["jpg", "jpeg", "png", "webp", "heic"],
-            label_visibility="collapsed",
-            key="cam_mob"
-        )
-        if cam_file:
-            image = Image.open(cam_file)
-            st.image(image, use_column_width=True)
-            process_image(image, country)
+    st.markdown("Tap **Take Photo** below — allow camera permission when prompted.")
+    camera_photo = st.camera_input("", label_visibility="collapsed", key="cam_mobile")
+    if camera_photo:
+        image = Image.open(camera_photo)
+        process_image(image, country)
+    st.markdown("---")
+    st.markdown("**Or upload from gallery:**")
+    cam_file = st.file_uploader(
+        "",
+        type=["jpg", "jpeg", "png", "webp", "heic"],
+        label_visibility="collapsed",
+        key="cam_mob"
+    )
+    if cam_file:
+        image = Image.open(cam_file)
+        st.image(image, use_column_width=True)
+        process_image(image, country)
     else:
         st.markdown("Point your webcam at the item and tap the capture button.")
         camera_photo = st.camera_input("", label_visibility="collapsed")
