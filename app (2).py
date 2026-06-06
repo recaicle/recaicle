@@ -16,6 +16,7 @@ st.set_page_config(
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 MODEL = "gemini-2.5-flash"
 
+# ── Regulation database ───────────────────────────────────────
 REGULATIONS = {
     "🇹🇼 Taiwan": {
         "bins": {
@@ -92,7 +93,7 @@ PET BOTTLES (ペットボトル) — separate category:
 
 OVERSIZED (粗大ゴミ):
 - Any item over 30cm: furniture, bicycles, large appliances
-- Air conditioners, TVs, fridges, washing machines → Home Appliance Recycling Law (not regular collection)
+- Air conditioners, TVs, fridges, washing machines → Home Appliance Recycling Law
 
 HAZARDOUS (危険ゴミ):
 - Spray cans (completely empty, punctured), cassette gas cartridges
@@ -119,11 +120,11 @@ BAC JAUNE (Yellow bin — ALL packaging):
 - Cartons/Tetra Pak: milk, juice, soup (rinsed and flattened)
 - Pizza boxes: yellow bin even if slightly greasy (remove food scraps first)
 
-CONTENEUR VERRE (Green/street glass container — glass only):
+CONTENEUR VERRE (Glass container — glass only):
 - Glass bottles, jars, preserve pots
 - NOT: drinking glasses, pyrex, mirrors, ceramics, light bulbs → gray bin
 - Glass goes in STREET-SIDE containers, not household bins
-- ⚠️ Paris exception: green bin = general waste; glass goes in white street containers
+- Paris exception: green bin = general waste; glass goes in white street containers
 
 BAC GRIS / NOIR (Gray bin — non-recyclable):
 - Tissues, paper towels, diapers, sanitary products, cat litter
@@ -135,7 +136,7 @@ BAC BRUN (Brown bin — organic, mandatory since Jan 2024):
 - Cooked food leftovers, bread, meat, fish scraps
 - Small food-soiled paper pieces
 
-DÉCHÈTERIE (Special drop-off):
+DECHETTERIE (Special drop-off):
 - Large furniture and appliances
 - Electronics (also accepted at retailers)
 - Batteries → collection boxes at stores
@@ -180,11 +181,22 @@ h1 {
 [data-testid="stTextInput"] input:focus {
     border-color: rgba(77,255,145,0.4) !important; box-shadow: none !important;
 }
+.stButton > button {
+    border-radius: 12px !important;
+    font-family: 'Syne', sans-serif !important;
+    font-weight: 700 !important;
+    transition: all 0.2s !important;
+}
 .stButton > button[kind="primary"] {
     background: #4dff91 !important; color: #071209 !important;
-    border: none !important; border-radius: 12px !important;
-    font-family: 'Syne', sans-serif !important; font-weight: 700 !important;
-    width: 100% !important; padding: 0.6rem !important;
+    border: none !important; width: 100% !important; padding: 0.6rem !important;
+}
+.stButton > button[kind="secondary"] {
+    background: #071209 !important; color: #4a6650 !important;
+    border: 1px solid #1e3622 !important; width: 100% !important; padding: 0.6rem !important;
+}
+.stButton > button[kind="secondary"]:hover {
+    border-color: rgba(77,255,145,0.3) !important; color: #4dff91 !important;
 }
 .stTabs [data-baseweb="tab-list"] {
     background: #071209 !important; border-radius: 12px !important; gap: 4px !important;
@@ -223,8 +235,6 @@ h1 {
 }
 .note-label { color:#c6a020; font-weight:600; }
 .conf-badge { font-size:10px; font-weight:600; letter-spacing:0.5px; margin-left:8px; }
-.divider { display:flex; align-items:center; gap:10px; color:#2e4832; font-size:12px; margin:8px 0; }
-.divider::before,.divider::after { content:''; flex:1; height:1px; background:#1e3622; }
 [data-testid="stSelectbox"] > div {
     background:#071209 !important; border:1px solid #1e3622 !important;
     border-radius:12px !important; color:#e8f5eb !important;
@@ -316,62 +326,75 @@ def process_image(image: Image.Image, country: str):
 st.markdown('<h1>recAIcle</h1>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">AI-powered waste sorting · Point, snap, toss right.</div>', unsafe_allow_html=True)
 
-# ── Device detection ──────────────────────────────────────────
-device = st.query_params.get("device", None)
-
-if device is None:
-    st.components.v1.html("""
-    <script>
-        const ua = navigator.userAgent;
-        const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua) ||
-                         ('ontouchstart' in window && window.innerWidth < 1024);
-        const url = new URL(window.parent.location.href);
-        url.searchParams.set('device', isMobile ? 'mobile' : 'desktop');
-        window.parent.location.replace(url.toString());
-    </script>
-    """, height=0)
-    st.stop()
-
-is_mobile = device == 'mobile'
-
 country = st.selectbox("", list(REGULATIONS.keys()), label_visibility="collapsed")
 st.markdown("---")
 
 tab_cam, tab_upload, tab_text = st.tabs(["📷 Camera", "📁 Upload Photo", "⌨️ Type Item"])
 
+# ── Camera tab ────────────────────────────────────────────────
 with tab_cam:
-    if is_mobile:
+    if "cam_mode" not in st.session_state:
+        st.session_state.cam_mode = "mobile"
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button(
+            "📱 Mobile",
+            use_container_width=True,
+            type="primary" if st.session_state.cam_mode == "mobile" else "secondary"
+        ):
+            st.session_state.cam_mode = "mobile"
+            st.rerun()
+    with col2:
+        if st.button(
+            "🖥️ Webcam",
+            use_container_width=True,
+            type="primary" if st.session_state.cam_mode == "desktop" else "secondary"
+        ):
+            st.session_state.cam_mode = "desktop"
+            st.rerun()
+
+    st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
+
+    if st.session_state.cam_mode == "mobile":
         st.markdown("Tap below → select **Take Photo** to use your camera.")
         cam_file = st.file_uploader(
             "",
             type=["jpg", "jpeg", "png", "webp", "heic"],
             label_visibility="collapsed",
-            key="cam_upload"
+            key="cam_mob"
         )
         if cam_file:
             image = Image.open(cam_file)
             st.image(image, use_column_width=True)
             process_image(image, country)
     else:
-        st.markdown("Point your camera at the item and tap the capture button.")
+        st.markdown("Point your webcam at the item and tap the capture button.")
         camera_photo = st.camera_input("", label_visibility="collapsed")
         if camera_photo:
             image = Image.open(camera_photo)
             process_image(image, country)
 
+# ── Upload tab ────────────────────────────────────────────────
 with tab_upload:
-    uploaded = st.file_uploader("", type=["jpg","jpeg","png","webp","heic"], label_visibility="collapsed")
+    uploaded = st.file_uploader(
+        "",
+        type=["jpg", "jpeg", "png", "webp", "heic"],
+        label_visibility="collapsed"
+    )
     if uploaded:
         image = Image.open(uploaded)
         st.image(image, use_column_width=True)
         process_image(image, country)
 
+# ── Text tab ──────────────────────────────────────────────────
 with tab_text:
     st.markdown("Describe the item you want to sort.")
     col1, col2 = st.columns([4, 1])
     with col1:
         text_query = st.text_input(
-            "", placeholder="e.g. plastic bottle, pizza box, old battery...",
+            "",
+            placeholder="e.g. plastic bottle, pizza box, old battery...",
             label_visibility="collapsed"
         )
     with col2:
