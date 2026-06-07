@@ -3,6 +3,7 @@ from google import genai
 from google.genai import types
 import json
 import re
+import time
 from PIL import Image
 import io
 
@@ -14,7 +15,7 @@ st.set_page_config(
 )
 
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-MODEL = "gemini-2.5-flash"
+MODEL = "gemini-2.5-flash-lite"
 
 COMPOSITE_INSTRUCTION = """
 COMPOSITE MATERIALS: If the item has multiple components made of different materials
@@ -220,9 +221,7 @@ h1 {
     background:#0d1f0f; border-radius:10px; padding:9px 12px; margin-bottom:6px;
     display:flex; gap:10px; align-items:flex-start; font-size:13px; color:#a8c0ac; line-height:1.5;
 }
-.step-item.composite {
-    background:#0a1e12; border-left: 2px solid rgba(77,255,145,0.3);
-}
+.step-item.composite { background:#0a1e12; border-left: 2px solid rgba(77,255,145,0.3); }
 .step-arrow { color:#4dff91; font-weight:700; flex-shrink:0; }
 .note-box {
     background:rgba(255,200,0,0.04); border:1px solid rgba(255,200,0,0.12);
@@ -248,26 +247,37 @@ def parse_json(text: str) -> dict:
 
 
 def call_gemini(prompt: str, image: Image.Image = None) -> dict:
-    try:
-        config = types.GenerateContentConfig(
-            response_mime_type="application/json",
-            thinking_config=types.ThinkingConfig(thinking_budget=0)
-        )
-        if image:
-            buf = io.BytesIO()
-            image.save(buf, format="JPEG")
-            img_part = types.Part.from_bytes(data=buf.getvalue(), mime_type="image/jpeg")
-            response = client.models.generate_content(
-                model=MODEL, contents=[img_part, prompt], config=config
-            )
-        else:
-            response = client.models.generate_content(
-                model=MODEL, contents=prompt, config=config
-            )
-        return parse_json(response.text)
-    except Exception as e:
-        st.error(f"AI error: {e}")
-        return None
+    config = types.GenerateContentConfig(
+        response_mime_type="application/json",
+        thinking_config=types.ThinkingConfig(thinking_budget=0)
+    )
+    for attempt in range(3):
+        try:
+            if image:
+                buf = io.BytesIO()
+                image.save(buf, format="JPEG")
+                img_part = types.Part.from_bytes(data=buf.getvalue(), mime_type="image/jpeg")
+                response = client.models.generate_content(
+                    model=MODEL, contents=[img_part, prompt], config=config
+                )
+            else:
+                response = client.models.generate_content(
+                    model=MODEL, contents=prompt, config=config
+                )
+            return parse_json(response.text)
+        except Exception as e:
+            err = str(e)
+            if "503" in err or "UNAVAILABLE" in err or "429" in err or "RESOURCE_EXHAUSTED" in err:
+                if attempt < 2:
+                    wait = (attempt + 1) * 3
+                    st.toast(f"⏳ Server busy, retrying in {wait}s... ({attempt + 1}/3)")
+                    time.sleep(wait)
+                else:
+                    st.error("⚠️ Server is currently overloaded. Please try again in a moment.")
+            else:
+                st.error(f"AI error: {e}")
+                return None
+    return None
 
 
 def render_result(data: dict, country: str):
@@ -278,11 +288,9 @@ def render_result(data: dict, country: str):
     conf_color  = conf_colors.get(data.get("confidence", "high"), "#4dff91")
     flag = country.split()[0]
 
-    # Render instructions — detect composite steps (contain "→")
     steps_html = ""
     for step in data.get("instructions", []):
         if "→" in step:
-            # composite step: highlight the arrow
             parts = step.split("→", 1)
             steps_html += f"""
             <div class="step-item composite">
@@ -344,7 +352,6 @@ st.markdown("---")
 
 tab_photo, tab_text = st.tabs(["📷 Photo", "⌨️ Type Item"])
 
-# ── Photo tab ─────────────────────────────────────────────────
 with tab_photo:
     st.markdown(
         "<div style='color:#4a6650;font-size:13px;margin-bottom:10px'>"
@@ -360,7 +367,6 @@ with tab_photo:
         st.image(image, use_column_width=True)
         process_image(image, country)
 
-# ── Text tab ──────────────────────────────────────────────────
 with tab_text:
     st.markdown("Describe the item you want to sort.")
     col1, col2 = st.columns([4, 1])
