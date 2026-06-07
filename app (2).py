@@ -40,6 +40,7 @@ REGULATIONS = {
 RECYCLABLE (資源回收):
 - Paper: newspapers, cardboard, books, paper bags, envelopes, receipts
 - Plastics: PET, HDPE, PP bottles and containers (clean)
+- PET bottles: label does NOT need to be removed (unlike Japan); just rinse and recycle whole
 - Glass: bottles and jars (clean)
 - Metals: aluminum and steel cans (rinsed)
 - Cartons/Tetra Pak: milk cartons, juice boxes (rinsed)
