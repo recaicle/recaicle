@@ -16,6 +16,15 @@ st.set_page_config(
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 MODEL = "gemini-2.5-flash"
 
+COMPOSITE_INSTRUCTION = """
+COMPOSITE MATERIALS: If the item has multiple components made of different materials
+(e.g. a pudding cup with a film lid, a bottle with a paper label, a Tetra Pak carton,
+a pizza box with a plastic window), list EACH component separately in the instructions field.
+Format each component as: "[Part name]: [preparation] → [bin name]"
+Example: "Plastic cup: rinse clean → 資源回收", "Film lid: peel off → 資源回收"
+For the main 'bin' field, use the bin for the largest/primary component.
+"""
+
 REGULATIONS = {
     "🇹🇼 Taiwan": {
         "bins": {
@@ -53,8 +62,9 @@ HAZARDOUS (有害廢棄物):
 BULKY (大型廢棄物):
 - Furniture, large appliances (requires prior booking)
 
+""" + COMPOSITE_INSTRUCTION + """
 Reply ONLY with valid JSON:
-{"item":"[English name]","bin":"[recyclable/food_waste/general/hazardous/bulky]","binLabel":"[label]","emoji":"[emoji]","instructions":["brief step 1","brief step 2"],"note":"[one key Taiwan tip if needed]","confidence":"[high/medium/low]"}"""
+{"item":"[English name]","bin":"[recyclable/food_waste/general/hazardous/bulky]","binLabel":"[label]","emoji":"[emoji]","instructions":["[Part]: [prep] → [bin]  OR  brief step if single material"],"note":"[one key Taiwan tip if needed]","confidence":"[high/medium/low]"}"""
     },
 
     "🇯🇵 Japan": {
@@ -98,8 +108,9 @@ HAZARDOUS (危険ゴミ):
 - Spray cans (completely empty, punctured), cassette gas cartridges
 - Batteries → collection boxes at convenience stores
 
+""" + COMPOSITE_INSTRUCTION + """
 Reply ONLY with valid JSON:
-{"item":"[English name]","bin":"[moeru/moenai/shigen/pet/sodai/kikenna]","binLabel":"[label]","emoji":"[emoji]","instructions":["brief step 1","brief step 2"],"note":"[one key Japan tip, mention rules vary by ward]","confidence":"[high/medium/low]"}"""
+{"item":"[English name]","bin":"[moeru/moenai/shigen/pet/sodai/kikenna]","binLabel":"[label]","emoji":"[emoji]","instructions":["[Part]: [prep] → [bin]  OR  brief step if single material"],"note":"[one key Japan tip, mention rules vary by ward]","confidence":"[high/medium/low]"}"""
     },
 
     "🇫🇷 France": {
@@ -140,8 +151,9 @@ DECHETTERIE (Special drop-off):
 - Textiles → street collection bins (Le Relais, Emmaüs)
 - Medicines → pharmacy
 
+""" + COMPOSITE_INSTRUCTION + """
 Reply ONLY with valid JSON:
-{"item":"[English name]","bin":"[jaune/vert/gris/brun/dechetterie]","binLabel":"[label]","emoji":"[emoji]","instructions":["brief step 1","brief step 2"],"note":"[one key France tip if needed]","confidence":"[high/medium/low]"}"""
+{"item":"[English name]","bin":"[jaune/vert/gris/brun/dechetterie]","binLabel":"[label]","emoji":"[emoji]","instructions":["[Part]: [prep] → [bin]  OR  brief step if single material"],"note":"[one key France tip if needed]","confidence":"[high/medium/low]"}"""
     },
 }
 
@@ -208,6 +220,10 @@ h1 {
     background:#0d1f0f; border-radius:10px; padding:9px 12px; margin-bottom:6px;
     display:flex; gap:10px; align-items:flex-start; font-size:13px; color:#a8c0ac; line-height:1.5;
 }
+.step-item.composite {
+    background:#0a1e12; border-left: 2px solid rgba(77,255,145,0.3);
+}
+.step-arrow { color:#4dff91; font-weight:700; flex-shrink:0; }
 .note-box {
     background:rgba(255,200,0,0.04); border:1px solid rgba(255,200,0,0.12);
     border-radius:10px; padding:10px 14px; font-size:12px; color:#7a8060; line-height:1.6; margin-top:6px;
@@ -261,14 +277,30 @@ def render_result(data: dict, country: str):
     conf_colors = {"high": "#4dff91", "medium": "#ffe040", "low": "#ff9090"}
     conf_color  = conf_colors.get(data.get("confidence", "high"), "#4dff91")
     flag = country.split()[0]
-    steps_html = "".join(
-        f'<div class="step-item"><span>✅</span><span>{s}</span></div>'
-        for s in data.get("instructions", [])
-    )
+
+    # Render instructions — detect composite steps (contain "→")
+    steps_html = ""
+    for step in data.get("instructions", []):
+        if "→" in step:
+            # composite step: highlight the arrow
+            parts = step.split("→", 1)
+            steps_html += f"""
+            <div class="step-item composite">
+              <span style="font-size:15px;flex-shrink:0">🔧</span>
+              <span>{parts[0].strip()} <span class="step-arrow">→</span> {parts[1].strip()}</span>
+            </div>"""
+        else:
+            steps_html += f"""
+            <div class="step-item">
+              <span style="font-size:15px;flex-shrink:0">✅</span>
+              <span>{step}</span>
+            </div>"""
+
     note_html = (
         f'<div class="note-box"><span class="note-label">📌 </span>{data["note"]}</div>'
         if data.get("note") else ""
     )
+
     st.markdown(f"""
     <div class="result-card">
       <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -281,10 +313,10 @@ def render_result(data: dict, country: str):
         <div style="font-size:36px;margin-top:4px">{data.get("emoji", bin_info["emoji"])}</div>
       </div>
       <div class="bin-box" style="background:{bin_info['color']}18;border:1px solid {bin_info['color']}33">
-        <div class="bin-label" style="color:{bin_info['color']}">THROW INTO</div>
+        <div class="bin-label" style="color:{bin_info['color']}">PRIMARY BIN</div>
         <div class="bin-name" style="color:{bin_info['color']}">{bin_info['emoji']} {bin_info['label']}</div>
       </div>
-      <div class="steps-title">HOW TO PREPARE</div>
+      <div class="steps-title">HOW TO SORT</div>
       {steps_html}
       {note_html}
     </div>
@@ -295,8 +327,8 @@ def process_image(image: Image.Image, country: str):
     with st.spinner("🔍 Analyzing..."):
         prompt = (
             f"{REGULATIONS[country]['prompt']}\n\n"
-            f"Identify the main waste item in this image and tell me which bin it goes in "
-            f"for {country.split(' ', 1)[1]}. Return only the JSON."
+            f"Identify the waste item(s) in this image and tell me which bin each component "
+            f"goes in for {country.split(' ', 1)[1]}. Return only the JSON."
         )
         result = call_gemini(prompt, image)
     if result:
@@ -334,7 +366,7 @@ with tab_text:
     col1, col2 = st.columns([4, 1])
     with col1:
         text_query = st.text_input(
-            "", placeholder="e.g. plastic bottle, pizza box, old battery...",
+            "", placeholder="e.g. pudding cup with film lid, pizza box...",
             label_visibility="collapsed"
         )
     with col2:
@@ -344,8 +376,10 @@ with tab_text:
         with st.spinner("🔍 Checking regulations..."):
             prompt = (
                 f"{REGULATIONS[country]['prompt']}\n\n"
-                f"Which bin does this item go in for {country.split(' ', 1)[1]}: "
-                f'"{text_query.strip()}"? Return only the JSON.'
+                f"How do I sort this item in {country.split(' ', 1)[1]}: "
+                f'"{text_query.strip()}"? '
+                f"If it has multiple components, break down each part separately. "
+                f"Return only the JSON."
             )
             result = call_gemini(prompt)
         if result:
