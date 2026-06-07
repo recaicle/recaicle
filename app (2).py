@@ -4,6 +4,7 @@ from google.genai import types
 import json
 import re
 import time
+import html as html_lib
 from PIL import Image
 import io
 
@@ -102,11 +103,11 @@ PET BOTTLES (ペットボトル):
 
 OVERSIZED (粗大ゴミ):
 - Any item over 30cm: furniture, bicycles, large appliances
-- Air conditioners, TVs, fridges, washing machines → Home Appliance Recycling Law
+- Air conditioners, TVs, fridges, washing machines go through Home Appliance Recycling Law
 
 HAZARDOUS (危険ゴミ):
 - Spray cans (completely empty, punctured), cassette gas cartridges
-- Batteries → collection boxes at convenience stores
+- Batteries go to collection boxes at convenience stores
 
 """ + COMPOSITE_INSTRUCTION + """
 Reply ONLY with valid JSON:
@@ -132,9 +133,9 @@ BAC JAUNE (Yellow bin — ALL packaging):
 
 CONTENEUR VERRE (Glass container — glass only):
 - Glass bottles, jars, preserve pots
-- NOT: drinking glasses, pyrex, mirrors, ceramics, light bulbs → gray bin
+- NOT: drinking glasses, pyrex, mirrors, ceramics, light bulbs go in gray bin
 - Glass goes in street-side containers, not household bins
-- Paris exception: green bin = general waste; glass goes in white street containers
+- Paris exception: green bin is general waste; glass goes in white street containers
 
 BAC GRIS (Gray bin — non-recyclable):
 - Tissues, paper towels, diapers, sanitary products, cat litter
@@ -148,8 +149,8 @@ BAC BRUN (Brown bin — organic, mandatory since Jan 2024):
 DECHETTERIE (Special drop-off):
 - Large furniture and appliances
 - Electronics (also at retailers), batteries (at stores), paint, chemicals
-- Textiles → street collection bins (Le Relais, Emmaüs)
-- Medicines → pharmacy
+- Textiles go in street collection bins (Le Relais, Emmaüs)
+- Medicines go to pharmacy
 
 """ + COMPOSITE_INSTRUCTION + """
 Reply ONLY with valid JSON:
@@ -220,7 +221,7 @@ h1 {
     background:#0d1f0f; border-radius:10px; padding:9px 12px; margin-bottom:6px;
     display:flex; gap:10px; align-items:flex-start; font-size:13px; color:#a8c0ac; line-height:1.5;
 }
-.step-item.composite { background:#0a1e12; border-left: 2px solid rgba(77,255,145,0.3); }
+.step-item.composite { background:#0a1e12; border-left:2px solid rgba(77,255,145,0.3); }
 .step-arrow { color:#4dff91; font-weight:700; }
 .note-box {
     background:rgba(255,200,0,0.04); border:1px solid rgba(255,200,0,0.12);
@@ -296,47 +297,63 @@ def render_result(data: dict, country: str):
     conf_color  = conf_colors.get(data.get("confidence", "high"), "#4dff91")
     flag = country.split()[0]
 
+    # html.escape() prevents AI text with < > & from breaking the HTML
     steps_html = ""
     for step in data.get("instructions", []):
         if "→" in step:
             parts = step.split("→", 1)
-            steps_html += f"""
-            <div class="step-item composite">
+            left  = html_lib.escape(parts[0].strip())
+            right = html_lib.escape(parts[1].strip())
+            steps_html += f"""<div class="step-item composite">
               <span style="font-size:15px;flex-shrink:0">🔧</span>
-              <span>{parts[0].strip()} <span class="step-arrow">→</span> {parts[1].strip()}</span>
+              <span>{left} <span class="step-arrow">→</span> {right}</span>
             </div>"""
         else:
-            steps_html += f"""
-            <div class="step-item">
+            escaped = html_lib.escape(step)
+            steps_html += f"""<div class="step-item">
               <span style="font-size:15px;flex-shrink:0">✅</span>
-              <span>{step}</span>
+              <span>{escaped}</span>
             </div>"""
 
+    item_name = html_lib.escape(data.get("item", "Item"))
+    note_text = html_lib.escape(data.get("note", ""))
     note_html = (
-        f'<div class="note-box"><span class="note-label">📌 </span>{data["note"]}</div>'
-        if data.get("note") else ""
+        f'<div class="note-box"><span class="note-label">📌 </span>{note_text}</div>'
+        if note_text else ""
     )
 
     st.markdown(f"""
-    <div class="result-card">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start">
-        <div>
-          <div class="result-item">{data.get("item", "Item")}</div>
-          <div class="country-tag">{flag} {country.split(" ", 1)[1]}
-            <span class="conf-badge" style="color:{conf_color}">● {data.get("confidence", "").upper()}</span>
-          </div>
-        </div>
-        <div style="font-size:36px;margin-top:4px">{data.get("emoji", bin_info["emoji"])}</div>
+<div class="result-card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div>
+      <div class="result-item">{item_name}</div>
+      <div class="country-tag">{flag} {html_lib.escape(country.split(" ", 1)[1])}
+        <span class="conf-badge" style="color:{conf_color}">● {data.get("confidence", "").upper()}</span>
       </div>
-      <div class="bin-box" style="background:{bin_info['color']}18;border:1px solid {bin_info['color']}33">
-        <div class="bin-label" style="color:{bin_info['color']}">PRIMARY BIN</div>
-        <div class="bin-name" style="color:{bin_info['color']}">{bin_info['emoji']} {bin_info['label']}</div>
-      </div>
-      <div class="steps-title">HOW TO SORT</div>
-      {steps_html}
-      {note_html}
     </div>
-    """, unsafe_allow_html=True)
+    <div style="font-size:36px;margin-top:4px">{data.get("emoji", bin_info["emoji"])}</div>
+  </div>
+  <div class="bin-box" style="background:{bin_info['color']}18;border:1px solid {bin_info['color']}33">
+    <div class="bin-label" style="color:{bin_info['color']}">PRIMARY BIN</div>
+    <div class="bin-name" style="color:{bin_info['color']}">{bin_info['emoji']} {html_lib.escape(bin_info['label'])}</div>
+  </div>
+  <div class="steps-title">HOW TO SORT</div>
+  {steps_html}
+  {note_html}
+</div>
+""", unsafe_allow_html=True)
+
+
+def process_image(image: Image.Image, country: str):
+    with st.spinner("🔍 Analyzing..."):
+        prompt = (
+            f"{REGULATIONS[country]['prompt']}\n\n"
+            f"Identify the waste item(s) in this image and tell me which bin each "
+            f"component goes in for {country.split(' ', 1)[1]}. Return only the JSON."
+        )
+        result = call_gemini(prompt, image)
+    if result:
+        st.session_state.photo_result = result
 
 
 # ── UI ────────────────────────────────────────────────────────
@@ -360,36 +377,24 @@ with tab_photo:
         label_visibility="collapsed"
     )
 
-    # New photo uploaded → store bytes and reset result
     if uploaded is not None:
-        new_bytes = uploaded.getvalue()  # getvalue() always returns full bytes
+        new_bytes = uploaded.getvalue()
         if new_bytes and new_bytes != st.session_state.photo_bytes:
             st.session_state.photo_bytes   = new_bytes
             st.session_state.photo_result  = None
             st.session_state.photo_country = country
 
-    # Country changed → re-analyze same photo
     if (st.session_state.photo_bytes is not None and
             st.session_state.photo_country != country):
         st.session_state.photo_result  = None
         st.session_state.photo_country = country
 
-    # Display stored photo
     if st.session_state.photo_bytes:
         image = Image.open(io.BytesIO(st.session_state.photo_bytes))
         st.image(image, use_column_width=True)
 
-        # Analyze if no result yet
         if st.session_state.photo_result is None:
-            with st.spinner("🔍 Analyzing..."):
-                prompt = (
-                    f"{REGULATIONS[country]['prompt']}\n\n"
-                    f"Identify the waste item(s) in this image and tell me which bin each "
-                    f"component goes in for {country.split(' ', 1)[1]}. Return only the JSON."
-                )
-                result = call_gemini(prompt, image)
-            if result:
-                st.session_state.photo_result = result
+            process_image(image, country)
 
         if st.session_state.photo_result:
             render_result(st.session_state.photo_result, country)
