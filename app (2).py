@@ -362,8 +362,8 @@ with tab_photo:
 
     # New photo uploaded → store bytes and reset result
     if uploaded is not None:
-    new_bytes = uploaded.getvalue()  # getvalue() 永遠回傳完整內容
-    if new_bytes and new_bytes != st.session_state.photo_bytes:
+        new_bytes = uploaded.getvalue()  # getvalue() always returns full bytes
+        if new_bytes and new_bytes != st.session_state.photo_bytes:
             st.session_state.photo_bytes   = new_bytes
             st.session_state.photo_result  = None
             st.session_state.photo_country = country
