@@ -22,7 +22,6 @@ COMPOSITE MATERIALS: If the item has multiple components made of different mater
 (e.g. a pudding cup with a film lid, a bottle with a paper label, a Tetra Pak carton,
 a pizza box with a plastic window), list EACH component separately in the instructions field.
 Format each component as: "[Part name]: [preparation] → [bin name]"
-Example: "Plastic cup: rinse clean → 資源回收", "Film lid: peel off → 資源回收"
 For the main 'bin' field, use the bin for the largest/primary component.
 """
 
@@ -65,7 +64,7 @@ BULKY (大型廢棄物):
 
 """ + COMPOSITE_INSTRUCTION + """
 Reply ONLY with valid JSON:
-{"item":"[English name]","bin":"[recyclable/food_waste/general/hazardous/bulky]","binLabel":"[label]","emoji":"[emoji]","instructions":["[Part]: [prep] → [bin]  OR  brief step if single material"],"note":"[one key Taiwan tip if needed]","confidence":"[high/medium/low]"}"""
+{"item":"[English name]","bin":"[recyclable/food_waste/general/hazardous/bulky]","binLabel":"[label]","emoji":"[emoji]","instructions":["step or [Part]: [prep] → [bin]"],"note":"[one key Taiwan tip if needed]","confidence":"[high/medium/low]"}"""
     },
 
     "🇯🇵 Japan": {
@@ -111,7 +110,7 @@ HAZARDOUS (危険ゴミ):
 
 """ + COMPOSITE_INSTRUCTION + """
 Reply ONLY with valid JSON:
-{"item":"[English name]","bin":"[moeru/moenai/shigen/pet/sodai/kikenna]","binLabel":"[label]","emoji":"[emoji]","instructions":["[Part]: [prep] → [bin]  OR  brief step if single material"],"note":"[one key Japan tip, mention rules vary by ward]","confidence":"[high/medium/low]"}"""
+{"item":"[English name]","bin":"[moeru/moenai/shigen/pet/sodai/kikenna]","binLabel":"[label]","emoji":"[emoji]","instructions":["step or [Part]: [prep] → [bin]"],"note":"[one key Japan tip, mention rules vary by ward]","confidence":"[high/medium/low]"}"""
     },
 
     "🇫🇷 France": {
@@ -154,7 +153,7 @@ DECHETTERIE (Special drop-off):
 
 """ + COMPOSITE_INSTRUCTION + """
 Reply ONLY with valid JSON:
-{"item":"[English name]","bin":"[jaune/vert/gris/brun/dechetterie]","binLabel":"[label]","emoji":"[emoji]","instructions":["[Part]: [prep] → [bin]  OR  brief step if single material"],"note":"[one key France tip if needed]","confidence":"[high/medium/low]"}"""
+{"item":"[English name]","bin":"[jaune/vert/gris/brun/dechetterie]","binLabel":"[label]","emoji":"[emoji]","instructions":["step or [Part]: [prep] → [bin]"],"note":"[one key France tip if needed]","confidence":"[high/medium/low]"}"""
     },
 }
 
@@ -222,7 +221,7 @@ h1 {
     display:flex; gap:10px; align-items:flex-start; font-size:13px; color:#a8c0ac; line-height:1.5;
 }
 .step-item.composite { background:#0a1e12; border-left: 2px solid rgba(77,255,145,0.3); }
-.step-arrow { color:#4dff91; font-weight:700; flex-shrink:0; }
+.step-arrow { color:#4dff91; font-weight:700; }
 .note-box {
     background:rgba(255,200,0,0.04); border:1px solid rgba(255,200,0,0.12);
     border-radius:10px; padding:10px 14px; font-size:12px; color:#7a8060; line-height:1.6; margin-top:6px;
@@ -235,6 +234,15 @@ h1 {
 }
 </style>
 """, unsafe_allow_html=True)
+
+# ── Session state init ────────────────────────────────────────
+for key, default in {
+    "photo_bytes": None,
+    "photo_result": None,
+    "photo_country": None,
+}.items():
+    if key not in st.session_state:
+        st.session_state[key] = default
 
 
 def parse_json(text: str) -> dict:
@@ -331,18 +339,6 @@ def render_result(data: dict, country: str):
     """, unsafe_allow_html=True)
 
 
-def process_image(image: Image.Image, country: str):
-    with st.spinner("🔍 Analyzing..."):
-        prompt = (
-            f"{REGULATIONS[country]['prompt']}\n\n"
-            f"Identify the waste item(s) in this image and tell me which bin each component "
-            f"goes in for {country.split(' ', 1)[1]}. Return only the JSON."
-        )
-        result = call_gemini(prompt, image)
-    if result:
-        render_result(result, country)
-
-
 # ── UI ────────────────────────────────────────────────────────
 st.markdown('<h1>recAIcle</h1>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">AI-powered waste sorting · Point, snap, toss right.</div>', unsafe_allow_html=True)
@@ -352,6 +348,7 @@ st.markdown("---")
 
 tab_photo, tab_text = st.tabs(["📷 Photo", "⌨️ Type Item"])
 
+# ── Photo tab ─────────────────────────────────────────────────
 with tab_photo:
     st.markdown(
         "<div style='color:#4a6650;font-size:13px;margin-bottom:10px'>"
@@ -362,11 +359,42 @@ with tab_photo:
         "", type=["jpg", "jpeg", "png", "webp", "heic"],
         label_visibility="collapsed"
     )
-    if uploaded:
-        image = Image.open(uploaded)
-        st.image(image, use_column_width=True)
-        process_image(image, country)
 
+    # New photo uploaded → store bytes and reset result
+    if uploaded is not None:
+        new_bytes = uploaded.read()
+        if new_bytes != st.session_state.photo_bytes:
+            st.session_state.photo_bytes   = new_bytes
+            st.session_state.photo_result  = None
+            st.session_state.photo_country = country
+
+    # Country changed → re-analyze same photo
+    if (st.session_state.photo_bytes is not None and
+            st.session_state.photo_country != country):
+        st.session_state.photo_result  = None
+        st.session_state.photo_country = country
+
+    # Display stored photo
+    if st.session_state.photo_bytes:
+        image = Image.open(io.BytesIO(st.session_state.photo_bytes))
+        st.image(image, use_column_width=True)
+
+        # Analyze if no result yet
+        if st.session_state.photo_result is None:
+            with st.spinner("🔍 Analyzing..."):
+                prompt = (
+                    f"{REGULATIONS[country]['prompt']}\n\n"
+                    f"Identify the waste item(s) in this image and tell me which bin each "
+                    f"component goes in for {country.split(' ', 1)[1]}. Return only the JSON."
+                )
+                result = call_gemini(prompt, image)
+            if result:
+                st.session_state.photo_result = result
+
+        if st.session_state.photo_result:
+            render_result(st.session_state.photo_result, country)
+
+# ── Text tab ──────────────────────────────────────────────────
 with tab_text:
     st.markdown("Describe the item you want to sort.")
     col1, col2 = st.columns([4, 1])
