@@ -671,6 +671,13 @@ with tab_photo:
             result = process_image(image, country)
             if result:
                 st.session_state.photo_result = result
+            elif st.session_state.photo_steps:
+                # Steps ran but no result — show retry prompt
+                st.warning("⚠️ AI 分析完成但未能產生結果，請點下方按鈕重試。")
+                if st.button("🔄 重新分析", type="primary"):
+                    st.session_state.photo_result = None
+                    st.session_state.photo_steps = []
+                    st.rerun()
 
         if st.session_state.photo_steps:
             render_agent_steps(st.session_state.photo_steps)
