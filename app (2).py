@@ -15,7 +15,12 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+try:
+    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+except KeyError:
+    st.error("⚠️ GEMINI_API_KEY not found. Go to Settings → Secrets and add it.")
+    st.stop()
+
 MODEL = "gemini-2.5-flash-lite"
 
 COMPOSITE_INSTRUCTION = """
@@ -40,7 +45,7 @@ REGULATIONS = {
 RECYCLABLE (資源回收):
 - Paper: newspapers, cardboard, books, paper bags, envelopes, receipts
 - Plastics: PET, HDPE, PP bottles and containers (clean)
-- PET bottles: label does NOT need to be removed (unlike Japan); just rinse and recycle whole
+- PET bottles: label does NOT need to be removed in Taiwan; just rinse and recycle whole
 - Glass: bottles and jars (clean)
 - Metals: aluminum and steel cans (rinsed)
 - Cartons/Tetra Pak: milk cartons, juice boxes (rinsed)
@@ -54,7 +59,8 @@ FOOD WASTE (廚餘):
 - Cooked food (熟廚餘): leftover cooked food, bones, rice, noodles
 
 GENERAL WASTE (一般垃圾):
-- Soiled or greasy packaging, tissues, diapers, sanitary products
+- Used tissues, paper towels, toilet paper, napkins — NEVER recyclable
+- Soiled or greasy packaging, diapers, sanitary products
 - Ceramics, dishes, mirrors, non-bottle glassware
 - Rubber, leather, plastic toys, wax-coated paper, photographs
 
@@ -237,8 +243,12 @@ h1 {
 </style>
 """, unsafe_allow_html=True)
 
+# ── Session state ─────────────────────────────────────────────
 for key, default in {
-    "photo_bytes": None, "photo_result": None, "photo_country": None,
+    "photo_bytes": None,
+    "photo_result": None,
+    "photo_country": None,
+    "photo_error": None,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -255,8 +265,7 @@ def parse_json(text: str) -> dict:
 
 def call_gemini(prompt: str, image: Image.Image = None) -> dict:
     config = types.GenerateContentConfig(
-        response_mime_type="application/json",
-        thinking_config=types.ThinkingConfig(thinking_budget=0)
+        response_mime_type="application/json"
     )
     for attempt in range(3):
         try:
@@ -280,15 +289,15 @@ def call_gemini(prompt: str, image: Image.Image = None) -> dict:
                     st.toast(f"⏳ Server busy, retrying in {wait}s... ({attempt + 1}/3)")
                     time.sleep(wait)
                 else:
-                    st.error("⚠️ Server is currently overloaded. Please try again in a moment.")
+                    st.session_state.photo_error = "⚠️ Server overloaded. Please try again in a moment."
             else:
-                st.error(f"AI error: {e}")
-                return None
+                st.session_state.photo_error = f"⚠️ AI error: {err[:300]}"
+            return None
     return None
 
 
 def render_result(data: dict, country: str):
-    reg      = REGULATIONS[country]
+    reg      = REGULATIONS.get(country, REGULATIONS["🇹🇼 Taiwan"])
     bin_key  = data.get("bin", "general")
     bin_info = reg["bins"].get(bin_key, {"label": data.get("binLabel","?"), "color":"#4dff91","emoji":"♻️"})
     conf_colors = {"high":"#4dff91","medium":"#ffe040","low":"#ff9090"}
@@ -299,7 +308,8 @@ def render_result(data: dict, country: str):
     for step in data.get("instructions", []):
         if "→" in step:
             parts = step.split("→", 1)
-            l, r = html_lib.escape(parts[0].strip()), html_lib.escape(parts[1].strip())
+            l = html_lib.escape(parts[0].strip())
+            r = html_lib.escape(parts[1].strip())
             steps_html += f'<div class="step-item composite"><span style="font-size:15px;flex-shrink:0">🔧</span><span>{l} <span class="step-arrow">→</span> {r}</span></div>'
         else:
             steps_html += f'<div class="step-item"><span style="font-size:15px;flex-shrink:0">✅</span><span>{html_lib.escape(step)}</span></div>'
@@ -331,18 +341,6 @@ def render_result(data: dict, country: str):
 """, unsafe_allow_html=True)
 
 
-def process_image(image: Image.Image, country: str):
-    with st.spinner("🔍 Analyzing..."):
-        prompt = (
-            f"{REGULATIONS[country]['prompt']}\n\n"
-            f"Identify the waste item(s) in this image and tell me which bin each "
-            f"component goes in for {country.split(' ', 1)[1]}. Return only the JSON."
-        )
-        result = call_gemini(prompt, image)
-    if result:
-        st.session_state.photo_result = result
-
-
 # ── UI ────────────────────────────────────────────────────────
 st.markdown('<h1>recAIcle</h1>', unsafe_allow_html=True)
 st.markdown('<div class="subtitle">AI-powered waste sorting · Point, snap, toss right.</div>', unsafe_allow_html=True)
@@ -352,6 +350,7 @@ st.markdown("---")
 
 tab_photo, tab_text = st.tabs(["📷 Photo", "⌨️ Type Item"])
 
+# ── Photo tab ─────────────────────────────────────────────────
 with tab_photo:
     st.markdown(
         "<div style='color:#4a6650;font-size:13px;margin-bottom:10px'>"
@@ -369,30 +368,50 @@ with tab_photo:
             st.session_state.photo_bytes   = new_bytes
             st.session_state.photo_result  = None
             st.session_state.photo_country = country
+            st.session_state.photo_error   = None
 
     if (st.session_state.photo_bytes is not None and
             st.session_state.photo_country != country):
         st.session_state.photo_result  = None
         st.session_state.photo_country = country
+        st.session_state.photo_error   = None
 
     if st.session_state.photo_bytes:
         image = Image.open(io.BytesIO(st.session_state.photo_bytes))
-        st.image(image, use_container_width=True)
-        if st.session_state.photo_result is None:
-            process_image(image, country)
+        st.image(image, width="stretch")
+
+        if st.session_state.photo_result is None and not st.session_state.photo_error:
+            with st.spinner("🔍 Analyzing..."):
+                prompt = (
+                    f"{REGULATIONS[country]['prompt']}\n\n"
+                    f"Identify the waste item(s) in this image and tell me which bin each "
+                    f"component goes in for {country.split(' ', 1)[1]}. Return only the JSON."
+                )
+                result = call_gemini(prompt, image)
+            if result:
+                st.session_state.photo_result = result
+
+        if st.session_state.photo_error:
+            st.error(st.session_state.photo_error)
+            if st.button("🔄 Retry", type="primary"):
+                st.session_state.photo_error  = None
+                st.session_state.photo_result = None
+                st.rerun()
+
         if st.session_state.photo_result:
             render_result(st.session_state.photo_result, country)
 
+# ── Text tab ──────────────────────────────────────────────────
 with tab_text:
     st.markdown("Describe the item you want to sort.")
     col1, col2 = st.columns([4, 1])
     with col1:
         text_query = st.text_input(
-            "", placeholder="e.g. pudding cup with film lid, pizza box...",
+            "Item to sort", placeholder="e.g. pudding cup with film lid, pizza box...",
             label_visibility="collapsed"
         )
     with col2:
-        ask_btn = st.button("Ask AI", type="primary", use_container_width=True)
+        ask_btn = st.button("Ask AI", type="primary", width="stretch")
 
     if ask_btn and text_query.strip():
         with st.spinner("🔍 Checking regulations..."):
@@ -406,3 +425,5 @@ with tab_text:
             result = call_gemini(prompt)
         if result:
             render_result(result, country)
+        elif not any(k in str(st.session_state.get("photo_error","")) for k in ["503","429","overloaded"]):
+            st.error("⚠️ Could not get a result. Please try again.")
