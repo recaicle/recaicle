@@ -267,6 +267,7 @@ def call_gemini(prompt: str, image: Image.Image = None) -> dict:
     config = types.GenerateContentConfig(
         response_mime_type="application/json"
     )
+    last_error = ""
     for attempt in range(3):
         try:
             if image:
@@ -282,17 +283,20 @@ def call_gemini(prompt: str, image: Image.Image = None) -> dict:
                 )
             return parse_json(response.text)
         except Exception as e:
-            err = str(e)
-            if "503" in err or "UNAVAILABLE" in err or "429" in err or "RESOURCE_EXHAUSTED" in err:
+            last_error = str(e)
+            if any(k in last_error for k in ["503","UNAVAILABLE","429","RESOURCE_EXHAUSTED"]):
                 if attempt < 2:
                     wait = (attempt + 1) * 3
-                    st.toast(f"⏳ Server busy, retrying in {wait}s... ({attempt + 1}/3)")
+                    st.toast(f"⏳ Server busy, retrying in {wait}s... ({attempt+1}/3)")
                     time.sleep(wait)
+                    continue  # ← 繼續下一次重試，不立刻 return
                 else:
-                    st.session_state.photo_error = "⚠️ Server overloaded. Please try again in a moment."
+                    st.session_state.photo_error = "⚠️ 伺服器繁忙，請稍後再試。"
+                    return None
             else:
-                st.session_state.photo_error = f"⚠️ AI error: {err[:300]}"
-            return None
+                st.session_state.photo_error = f"⚠️ AI error: {last_error[:300]}"
+                return None
+    st.session_state.photo_error = f"⚠️ 三次嘗試均失敗：{last_error[:200]}"
     return None
 
 
