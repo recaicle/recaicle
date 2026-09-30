@@ -561,7 +561,7 @@ with tab_photo:
 
     if st.session_state.photo_bytes:
         image = Image.open(io.BytesIO(st.session_state.photo_bytes))
-        st.image(image, use_column_width=True)
+        st.image(image, use_container_width=True)
 
         if st.session_state.photo_result is None:
             result = process_image(image, country)
