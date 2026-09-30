@@ -531,7 +531,8 @@ h1 {
 # ── Session state ─────────────────────────────────────────────
 for key, val in {
     "photo_bytes": None, "photo_result": None,
-    "photo_country": None, "photo_steps": []
+    "photo_country": None, "photo_steps": [],
+    "photo_analyzed": False,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = val
@@ -652,32 +653,44 @@ with tab_photo:
     if uploaded is not None:
         new_bytes = uploaded.getvalue()
         if new_bytes and new_bytes != st.session_state.photo_bytes:
-            st.session_state.photo_bytes   = new_bytes
-            st.session_state.photo_result  = None
-            st.session_state.photo_country = country
-            st.session_state.photo_steps   = []
+            st.session_state.photo_bytes    = new_bytes
+            st.session_state.photo_result   = None
+            st.session_state.photo_country  = country
+            st.session_state.photo_steps    = []
+            st.session_state.photo_analyzed = False
 
     if (st.session_state.photo_bytes is not None and
             st.session_state.photo_country != country):
-        st.session_state.photo_result  = None
-        st.session_state.photo_country = country
-        st.session_state.photo_steps   = []
+        st.session_state.photo_result   = None
+        st.session_state.photo_country  = country
+        st.session_state.photo_steps    = []
+        st.session_state.photo_analyzed = False
 
     if st.session_state.photo_bytes:
         image = Image.open(io.BytesIO(st.session_state.photo_bytes))
         st.image(image, use_container_width=True)
 
-        if st.session_state.photo_result is None:
+        # Only analyze once per photo (photo_analyzed prevents infinite rerun loop)
+        if st.session_state.photo_result is None and not st.session_state.photo_analyzed:
             result = process_image(image, country)
+            st.session_state.photo_analyzed = True
             if result:
                 st.session_state.photo_result = result
-            elif st.session_state.photo_steps:
-                # Steps ran but no result — show retry prompt
-                st.warning("⚠️ AI 分析完成但未能產生結果，請點下方按鈕重試。")
+            else:
+                # Show error regardless of whether any steps ran
+                st.error("⚠️ 分析失敗，請重新試試。")
                 if st.button("🔄 重新分析", type="primary"):
-                    st.session_state.photo_result = None
-                    st.session_state.photo_steps = []
+                    st.session_state.photo_analyzed = False
+                    st.session_state.photo_steps    = []
                     st.rerun()
+
+        elif st.session_state.photo_result is None and st.session_state.photo_analyzed:
+            # Previously analyzed but failed — show retry
+            st.error("⚠️ 分析失敗，請重新試試。")
+            if st.button("🔄 重新分析", type="primary"):
+                st.session_state.photo_analyzed = False
+                st.session_state.photo_steps    = []
+                st.rerun()
 
         if st.session_state.photo_steps:
             render_agent_steps(st.session_state.photo_steps)
