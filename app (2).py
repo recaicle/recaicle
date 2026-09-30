@@ -237,11 +237,8 @@ h1 {
 </style>
 """, unsafe_allow_html=True)
 
-# ── Session state init ────────────────────────────────────────
 for key, default in {
-    "photo_bytes": None,
-    "photo_result": None,
-    "photo_country": None,
+    "photo_bytes": None, "photo_result": None, "photo_country": None,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -293,43 +290,32 @@ def call_gemini(prompt: str, image: Image.Image = None) -> dict:
 def render_result(data: dict, country: str):
     reg      = REGULATIONS[country]
     bin_key  = data.get("bin", "general")
-    bin_info = reg["bins"].get(bin_key, {"label": data.get("binLabel", "?"), "color": "#4dff91", "emoji": "♻️"})
-    conf_colors = {"high": "#4dff91", "medium": "#ffe040", "low": "#ff9090"}
-    conf_color  = conf_colors.get(data.get("confidence", "high"), "#4dff91")
+    bin_info = reg["bins"].get(bin_key, {"label": data.get("binLabel","?"), "color":"#4dff91","emoji":"♻️"})
+    conf_colors = {"high":"#4dff91","medium":"#ffe040","low":"#ff9090"}
+    conf_color  = conf_colors.get(data.get("confidence","high"), "#4dff91")
     flag = country.split()[0]
 
-    # html.escape() prevents AI text with < > & from breaking the HTML
     steps_html = ""
     for step in data.get("instructions", []):
         if "→" in step:
             parts = step.split("→", 1)
-            left  = html_lib.escape(parts[0].strip())
-            right = html_lib.escape(parts[1].strip())
-            steps_html += f"""<div class="step-item composite">
-              <span style="font-size:15px;flex-shrink:0">🔧</span>
-              <span>{left} <span class="step-arrow">→</span> {right}</span>
-            </div>"""
+            l, r = html_lib.escape(parts[0].strip()), html_lib.escape(parts[1].strip())
+            steps_html += f'<div class="step-item composite"><span style="font-size:15px;flex-shrink:0">🔧</span><span>{l} <span class="step-arrow">→</span> {r}</span></div>'
         else:
-            escaped = html_lib.escape(step)
-            steps_html += f"""<div class="step-item">
-              <span style="font-size:15px;flex-shrink:0">✅</span>
-              <span>{escaped}</span>
-            </div>"""
+            steps_html += f'<div class="step-item"><span style="font-size:15px;flex-shrink:0">✅</span><span>{html_lib.escape(step)}</span></div>'
 
-    item_name = html_lib.escape(data.get("item", "Item"))
-    note_text = html_lib.escape(data.get("note", ""))
     note_html = (
-        f'<div class="note-box"><span class="note-label">📌 </span>{note_text}</div>'
-        if note_text else ""
+        f'<div class="note-box"><span class="note-label">📌 </span>{html_lib.escape(data.get("note",""))}</div>'
+        if data.get("note") else ""
     )
 
     st.markdown(f"""
 <div class="result-card">
   <div style="display:flex;justify-content:space-between;align-items:flex-start">
     <div>
-      <div class="result-item">{item_name}</div>
-      <div class="country-tag">{flag} {html_lib.escape(country.split(" ", 1)[1])}
-        <span class="conf-badge" style="color:{conf_color}">● {data.get("confidence", "").upper()}</span>
+      <div class="result-item">{html_lib.escape(data.get("item","Item"))}</div>
+      <div class="country-tag">{flag} {html_lib.escape(country.split(" ",1)[1])}
+        <span class="conf-badge" style="color:{conf_color}">● {data.get("confidence","").upper()}</span>
       </div>
     </div>
     <div style="font-size:36px;margin-top:4px">{data.get("emoji", bin_info["emoji"])}</div>
@@ -366,7 +352,6 @@ st.markdown("---")
 
 tab_photo, tab_text = st.tabs(["📷 Photo", "⌨️ Type Item"])
 
-# ── Photo tab ─────────────────────────────────────────────────
 with tab_photo:
     st.markdown(
         "<div style='color:#4a6650;font-size:13px;margin-bottom:10px'>"
@@ -374,7 +359,7 @@ with tab_photo:
         unsafe_allow_html=True
     )
     uploaded = st.file_uploader(
-        "", type=["jpg", "jpeg", "png", "webp", "heic"],
+        "", type=["jpg","jpeg","png","webp","heic"],
         label_visibility="collapsed"
     )
 
@@ -392,15 +377,12 @@ with tab_photo:
 
     if st.session_state.photo_bytes:
         image = Image.open(io.BytesIO(st.session_state.photo_bytes))
-        st.image(image, use_column_width=True)
-
+        st.image(image, use_container_width=True)
         if st.session_state.photo_result is None:
             process_image(image, country)
-
         if st.session_state.photo_result:
             render_result(st.session_state.photo_result, country)
 
-# ── Text tab ──────────────────────────────────────────────────
 with tab_text:
     st.markdown("Describe the item you want to sort.")
     col1, col2 = st.columns([4, 1])
