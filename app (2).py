@@ -21,7 +21,7 @@ except KeyError:
     st.error("⚠️ GEMINI_API_KEY not found. Go to Settings → Secrets and add it.")
     st.stop()
 
-MODEL = "gemini-2.5-flash-lite"
+MODEL = "gemini-1.5-flash"
 
 COMPOSITE_INSTRUCTION = """
 COMPOSITE MATERIALS: If the item has multiple components made of different materials
