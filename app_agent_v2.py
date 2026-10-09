@@ -18,7 +18,7 @@ except KeyError:
     st.error("⚠️ GEMINI_API_KEY not found in Streamlit Secrets. "
              "Go to Settings → Secrets and add: GEMINI_API_KEY = \"your_key\"")
     st.stop()
-MODEL = "gemini-2.5-flash-lite"
+MODEL = "gemini-2.5-flash"
 
 # ── Regulation database ───────────────────────────────────────
 REGULATIONS = {
@@ -380,9 +380,21 @@ For composite items, use "[Part]: [prep] → [bin name]" format in instructions.
 
         # Defensive check — prevents TypeError when API returns empty candidates/parts
         if not response.candidates:
+            if iteration < 3:
+                time.sleep(2)
+                continue
             return None, agent_steps
         content = response.candidates[0].content
         if not content or not content.parts:
+            # Model returned empty — nudge it to continue the workflow
+            if iteration < 4:
+                messages.append(types.Content(role="user", parts=[
+                    types.Part(text=(
+                        "Please continue: call query_regulation_database with the item "
+                        "you identified, then return the JSON sorting result."
+                    ))
+                ]))
+                continue
             return None, agent_steps
 
         fn_calls = [p for p in content.parts
