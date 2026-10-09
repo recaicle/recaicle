@@ -378,7 +378,13 @@ For composite items, use "[Part]: [prep] → [bin name]" format in instructions.
                     continue
             return None, agent_steps
 
-        content  = response.candidates[0].content
+        # Defensive check — prevents TypeError when API returns empty candidates/parts
+        if not response.candidates:
+            return None, agent_steps
+        content = response.candidates[0].content
+        if not content or not content.parts:
+            return None, agent_steps
+
         fn_calls = [p for p in content.parts
                     if hasattr(p, "function_call") and p.function_call
                     and p.function_call.name]
@@ -668,7 +674,7 @@ with tab_photo:
 
     if st.session_state.photo_bytes:
         image = Image.open(io.BytesIO(st.session_state.photo_bytes))
-        st.image(image, use_container_width=True)
+        st.image(image, width="stretch")
 
         # Only analyze once per photo (photo_analyzed prevents infinite rerun loop)
         if st.session_state.photo_result is None and not st.session_state.photo_analyzed:
